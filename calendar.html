@@ -1,0 +1,317 @@
+<!DOCTYPE HTML>
+<html>
+    <head>
+        <title>Calendar puzzle</title>
+        <style>
+            body {
+                position: relative;
+                font-family: 'lucida grande', tahoma, verdana, arial, sans-serif;
+                top: 10px;
+                box-sizing: border-box;
+            }
+
+            #calendarGrid {
+                width: 1000px;
+            }
+
+            .halfHour {
+                height: 30px;
+                width: 100%;
+                border-bottom: 1px solid #ccc;
+                position: relative;
+                box-sizing: border-box;
+            }
+
+            .halfHour:last-child {
+                border:none;
+            }
+            .halfHour:last-child .eventArea{
+                background: none;
+                border:none;
+            }
+
+
+            .timeLabel {
+                width: 80px;
+                height: 100%;
+                display: inline-block;
+                margin-right: 20px;
+                top:-12px;
+                /*margin-top: 5px;*/
+                /*vertical-align: top;*/
+                text-align: right;
+                position:absolute;
+                left:0;
+            }
+
+            .eventArea {
+                background-color: #ececec;
+                border: solid 1px #ffffff;
+                width:900px;
+                height: 100%;
+                display: inline-block;
+                position: absolute;
+                left:100px;
+            }
+
+
+
+            .timeText {
+
+            }
+
+            .biggerText {
+                font-size: 16px;
+                color:#7f7f7f;
+                font-weight: bold;
+            }
+
+            .smallerText {
+                font-size: 9px;
+                color: #a7a7a7;
+            }
+
+            .AMPM {
+                font-size:9px;
+                color: #a7a7a7;
+            }
+
+            #events {
+                position:absolute;
+                left: 100px;
+                top: 0px;
+                width: 900px;
+                height: 100%;
+            }
+            .myEvent {
+                display: inline-block;
+                border: 1px solid #d5d5d5;
+                border-left: 5px solid #4b6ea8;
+                background-color:#ffffff;
+                padding: 2px;
+                box-sizing: border-box;
+                position: absolute;
+                z-index: 5;
+            }
+
+            .eventTitle {
+                color:#4b6ea8;
+                display: block;
+                font-size:12px;
+                font-weight: bold;
+                text-decoration: none;
+            }
+
+            .eventLocation {
+                color:#cccccc;
+                display: block;
+                font-size:9px;
+            }
+        </style>
+
+	    <script src = "jquery-1.7.2.min.js"></script>
+        <script src = "lodash.js"></script>
+    </head>
+
+    <body>
+        <div id = "calendarGrid"></div>
+        <div id = "events"></div>
+    </body>
+
+	<script>
+
+        //TODO: may need to sort the events array then assign the id
+//        var events =[
+//            {id: 0,start: 30, end: 150},
+//            {id: 1,start: 30, end: 500},
+//            {id: 2,start: 210, end: 400},
+//            {id: 3,start: 240, end: 450},
+//            {id:4,start: 240, end: 400},
+//            {id: 5,start: 250, end: 300} ];
+//        var events =[
+        //            {id:0, start: 0, end: 30},
+        //            {id:1, start: 30, end: 60},
+        //            {id:2, start: 30, end: 90},
+        //            {id:3, start: 60, end: 120},
+        //            {id:4, start: 60, end: 120},
+        //            {id:5, start: 90, end: 120},
+        //            {id:6, start: 90, end: 120},
+        //            {id:7, start: 180, end: 210},
+        //            {id:8, start: 180, end: 240}
+        //        ];
+        var events =  [{id:  0, start: 100, end: 300},
+                     {id:  1, start: 150, end: 400},
+                     {id:  2, start: 160, end: 350},
+                     {id:  3, start: 400, end: 600},
+                     {id:  4, start: 400, end: 600},
+                     {id:  5, start: 400, end: 600},
+                     {id:  6, start: 410, end: 600},
+                     {id:  7, start:   0, end: 600},
+                     {id:  8, start: 420, end: 600},
+                     {id:  9, start:   0, end: 360},
+                     {id: 10, start:   0, end: 150},
+                     {id: 11, start:  20, end: 360},
+                     {id: 12, start:  20, end: 360},
+                     {id: 13, start: 600, end: 720},
+                     {id: 14, start: 600, end: 660},
+                     {id: 15, start: 660, end: 720},
+                     {id: 16, start: 600, end: 720}
+        	];
+
+        var HALF_HOUR_HEIGHT = 30;
+        var PIXEL_PER_MIN = HALF_HOUR_HEIGHT/30;
+        var EVENT_AREA_WIDTH = 900;
+        /*
+        * column's length is the number of columns
+        * example: column_hash = {1: [1, 2, 3, 4], 2: [2, 3]}
+         */
+        var columns = [];
+        /*
+        * each dimension of the group is an array, which keep tracks on the event id's that belongs to this group        *
+        * events in the same group will equally divide the full width
+        *  example: groups = {"0": 1, "1": 3}
+        */
+        var groups = [];
+        var targetGroupRange;
+
+		function layOutDay(e) {
+            events = sortEventsByStartTime(e);
+			layoutTimeGrid();
+            layoutEvents(events);
+            calculateEventPosition(events);
+            renderEvents(events);
+		}
+
+        function sortEventsByStartTime(events) {
+            events = _.sortBy(events, "start");
+            events.forEach(function(e, i){
+                e.id = i;
+            });
+            return events;
+        }
+
+		function layoutTimeGrid() {
+			for(var i = 0; i < 25; i++) {
+                var halfHourBlockHtml = "<div class = 'halfHour'><div class = 'timeLabel'></div><div class = 'eventArea'></div></div>";
+                var thisHalfHourBlock = $(halfHourBlockHtml).appendTo($("#calendarGrid"));
+                var labelBlock = thisHalfHourBlock.find('.timeLabel');
+                var myHour =  parseInt(i / 2) + 9;
+                if(myHour > 12) {
+                    myHour = myHour - 12;
+                }
+                if(i % 2 == 0){
+                    if(i < 6){
+                        labelBlock.append("<span class = 'timeText biggerText'>" + myHour+ ":00 <span class = 'AMPM'>AM</span>" + "</span>");
+                    }
+                    else {
+                        labelBlock.append("<span class = 'timeText biggerText'>" + myHour+ ":00 <span class = 'AMPM'>PM</span>" + "</span>");
+                    }
+                }
+                else {
+                    labelBlock.append("<span class = 'timeText smallerText'>" + myHour + ":30" + "</span>");
+                }
+			}
+		}
+
+        function layoutEvents(events) {
+            _.forEach(events, function(e, i){
+                findColumn(e);
+                findGroup(e);
+            });
+        }
+
+        function findColumn(e) {
+            for(var i = 0; i < columns.length; i++) {
+                //will e be placed in column i?
+                //first, what is in column i already?
+                if(columns[i].constructor === Array){
+                    //new event does not collide with existing items in column i, so the event can stay in column i
+                    //as start of the new event is at or after the end of the last event in column[i]
+                    //noted that the events are sorted by start time, so we can just look at the end time of the LAST event
+                    if(e.start >= events[columns[i][columns[i].length-1]].end) {
+                        e.col = i;
+                        columns[i].push(e.id);
+                        return i;
+                    }
+                    //new event collide with existing items in column i, continue checking column i+1 to see if it can fit in column i+1
+                    else {
+                        continue;
+                    }
+                }
+                else {
+                    e.col = i;
+                    columns[i] = [e.id];
+                    return i;
+                }
+            }
+
+            //if the new event doesn't fit into all existing columns, adding a new column.
+            //after the above for loop,now i == columns.length, as the columns are from 0->(length-1) , hence i is the number of the new column
+            e.col = i;
+            columns[i] = [e.id];
+            return i;
+        }
+
+        function findGroup(e) {
+           if(!groups[0] || groups[0].constructor !== Array) {
+               e.group = 0;
+               groups[0] = [e.id];
+               targetGroupRange = [e.start, e.end];
+           }
+           else {
+               var lastGroup = groups[groups.length -1];
+               //if the new event is contigent with elements in the last group, assign it to the last group
+               if(_.inRange(e.start, targetGroupRange[0], targetGroupRange[1])) {
+                   e.group = groups.length - 1;
+                   lastGroup.push(e.id);
+                   targetGroupRange[1] = e.end > targetGroupRange[1] ? e.end : targetGroupRange[1];
+               }
+               //other wise, add ad it to a new group
+               else {
+                   e.group = groups.length;
+                   groups[groups.length] = [e.id];
+                   targetGroupRange = [e.start, e.end];
+               }
+           }
+        }
+
+        function calculateEventPosition(events) {
+            var columnsCntForGroups = {};
+            groups.forEach(function(g, i){
+                columnsCntForGroups[i] = getColumnsCountForGroup(i);
+            });
+            events.forEach(function (e, i) {
+                e.height = ( e.end - e.start) * PIXEL_PER_MIN;
+                e.top = e.start * PIXEL_PER_MIN;
+                //calculate wide
+                e.width = 900/columnsCntForGroups[e.group];
+                e.left = e.col * e.width;
+            });
+        }
+
+        function getColumnsCountForGroup(groupIdx) {
+            var eventsIdInGroup = groups[groupIdx];
+            var eventsInGroup = [];
+            eventsIdInGroup.forEach(function(e, i){
+                eventsInGroup.push(events[e]);
+            });
+            var cols = _.map(eventsInGroup, "col");
+            return _.uniq(cols).length;
+        }
+
+        function renderEvents(events) {
+            events.forEach(function (e, i) {
+                var eventHTML = "<div class = 'myEvent'><a class = 'eventTitle' href = 'javascript:void(0)'>Sample Item</a><div class = 'eventLocation'>Sample location</div></div>";
+                var $event = $(eventHTML);
+                $event.css({"left": e.left, "top": e.top, "width": e.width, "height": e.height});
+                $("#events").append($event);
+            });
+        }
+
+
+        layOutDay(events);
+	</script>
+
+
+
+</html>
